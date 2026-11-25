@@ -44,7 +44,7 @@ var SkyGL = function (canvas, url, starUrls) {
     // real stars from the photo: a brighter sky (twilight, town light, moonlight) cuts the faint ones first
     '  if (nst > 0.5 && sgain > 0.0 && alt > -0.01) {',
     '    vec3 s = nst > 1.5 ? (uv.x < 0.5 ? texture2D(starsA, vec2(uv.x * 2.0, uv.y)).rgb : texture2D(starsB, vec2(uv.x * 2.0 - 1.0, uv.y)).rgb) : texture2D(starsA, uv).rgb;',
-    '    s = max(s - scut, 0.0) / (1.0 - scut);',
+    '    s = pow(max(s - scut, 0.0) / (1.0 - scut), vec3(0.8));',  // lifts the faint stars more than the bright ones
     '    col += min(s * sboost, vec3(1.0)) * sgain * smoothstep(-0.01, 0.2, alt);',
     '  }',
     '  gl_FragColor = vec4(col, 1.0);',
@@ -208,7 +208,7 @@ var SkyGL = function (canvas, url, starUrls) {
         // a shrunk star map averages each star over several texels: give that light back (a screen pixel spans
         // 1/(f*dpr) radians, a texel 2pi/width)
         var texel = 6.2831853 / (sWant > 1 ? 8192 : 4096), pix = 1 / (v.f * DPR);
-        gl.uniform1f(U.sboost, Math.max(1, Math.min(4, Math.pow(pix / texel, 0.9))) * (v.k > 0 ? 1.7 : 1)); // the small VR eye views get extra
+        gl.uniform1f(U.sboost, Math.max(1, Math.min(4, Math.pow(pix / texel, 0.9))) * (v.k > 0 ? 2.0 : 1)); // the small VR eye views get extra
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       }
       gl.disable(gl.SCISSOR_TEST);

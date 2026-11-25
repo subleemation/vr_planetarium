@@ -298,7 +298,7 @@
     var moonJ = C.radec2vec.apply(null, C.bodyRaDec(S, 'Moon', st.minutes)), moonUp = C.apply(M, moonJ)[2];
     var moonK = (1 - (moonJ[0] * sunJ[0] + moonJ[1] * sunJ[1] + moonJ[2] * sunJ[2])) / 2; // lit fraction
     var moonLight = moonUp > 0 ? moonK * moonK * Math.min(1, moonUp / 0.42) : 0;
-    lim -= 1.6 * moonLight;
+    lim -= 0.8 * moonLight; // gentler than a real full Moon, so the stars stay the show
     var dark = Math.max(0, Math.min(1, (-sunAlt - 10) / 8)); // 0 at -10, 1 at -18
     var bodies = [];
     ['Saturn', 'Uranus', 'Neptune', 'Jupiter', 'Mars', 'Venus', 'Mercury', 'Moon'].forEach(function (b) {
@@ -408,12 +408,12 @@
       if (vis < -0.3) continue;
       if (photo) { // brightness ~ flux: each magnitude brighter is 2.5x the light, shown as a wider, stronger glow
         var fl = Math.pow(10, -0.4 * (mEff - 3.2));
-        var vk = view.vr ? 1.35 : 1, dp = Math.min(60, 7 + 5.5 * Math.sqrt(fl)) * sizeK * vk;
-        c.globalAlpha = Math.max(0, Math.min(0.95, 0.15 * vk * Math.sqrt(fl) * Math.min(1, vis / 1.5)));
+        var vk = view.vr ? 1.35 : 1, dp = Math.min(72, 8.4 + 6.6 * Math.sqrt(fl)) * sizeK * vk;
+        c.globalAlpha = Math.max(0, Math.min(0.95, 0.22 * vk * Math.sqrt(fl) * Math.min(1, vis / 1.5)));
         c.drawImage(psf[SB[i]], P[0] - dp / 2, P[1] - dp / 2, dp, dp);
         continue;
       }
-      var alpha = Math.max(0.25, Math.min(1, 0.45 + vis / 1.4));
+      var alpha = Math.max(0.35, Math.min(1, 0.45 + vis / 1.4));
       var d = Math.max(3, (lim + 2.6 - mEff) * 2.5) * sizeK;
       if (m < 1.5) d *= 1.25;
       c.globalAlpha = alpha;
@@ -1751,13 +1751,13 @@
     var t = Math.max(0, Math.min(1, (-frame.sunAlt - 4) / 14));
     var lim = frame.lim, gain = opt('mw') ? frame.dark * frame.dark * Math.max(0.1, Math.min(1, (lim - 3.0) / 3.1)) * 0.95 : 0;
     var ml = frame.moonLight;
-    gain *= 1 - 0.75 * ml;
-    GL.draw(views, frame.T, frame.M, [(mix(34, 6, t) + 14 * ml) / 255, (mix(52, 7, t) + 20 * ml) / 255, (mix(98, 12, t) + 34 * ml) / 255], gain * 0.7, {
+    gain *= 1 - 0.4 * ml;
+    GL.draw(views, frame.T, frame.M, [(mix(34, 6, t) + 6 * ml) / 255, (mix(52, 7, t) + 9 * ml) / 255, (mix(98, 12, t) + 16 * ml) / 255], gain * 0.7, {
       glow: [(34 - 14 * t) / 255, (36 - 16 * t) / 255, (50 - 26 * t) / 255],
       dome: [(52 * (0.4 + 0.6 * t)) / 255, (38 * (0.4 + 0.6 * t)) / 255, (26 * (0.4 + 0.6 * t)) / 255],
       cut: 0.2, curve: 1.25, // keep only the band itself, not the haze around it
       // star photo: fades in after sunset, and a brighter sky (low limiting magnitude) cuts the faint stars first
-      sgain: Math.max(0, Math.min(1, (lim - 0.8) / 2.2)) * 1.35, scut: Math.max(0, Math.min(0.7, (6.4 - lim) * 0.1))
+      sgain: Math.max(0, Math.min(1, (lim - 0.8) / 2.2)) * 2.3, scut: Math.max(0, Math.min(0.7, (6.4 - lim) * 0.08))
     });
   }
   // VR: instead of pointing with an arrow, the sky turns (slowly, about the vertical only) so that what the
