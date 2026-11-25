@@ -93,6 +93,17 @@
     SB[i] = bv < 0 ? 0 : bv < 0.3 ? 1 : bv < 0.6 ? 2 : bv < 0.9 ? 3 : bv < 1.3 ? 4 : 5;
   }
   var STAR_COLORS = ['#b9cbff', '#dbe4ff', '#fff6ea', '#fff0c8', '#ffd9a0', '#ffbd84'];
+  // stars on top of the star photo: a soft point-spread (gaussian core, faint wide halo) like a long exposure
+  var psf = STAR_COLORS.map(function (col) {
+    var c = document.createElement('canvas'); c.width = c.height = 128;
+    var g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    var n = parseInt(col.slice(1), 16), rgb = [n >> 16, (n >> 8) & 255, n & 255].map(function (v) { return Math.round(v + (255 - v) * 0.55); }).join(',');
+    [[0, 1], [0.05, 0.92], [0.1, 0.62], [0.16, 0.3], [0.25, 0.11], [0.4, 0.035], [0.65, 0.01], [1, 0]].forEach(function (s) {
+      gr.addColorStop(s[0], 'rgba(' + (s[0] < 0.06 ? '255,255,255' : rgb) + ',' + s[1] + ')');
+    });
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    return c;
+  });
   var sprites = STAR_COLORS.map(function (col) {
     // a crisp solid core with a short halo, drawn large so it stays sharp on 3x phone screens
     var c = document.createElement('canvas'); c.width = c.height = 128;
@@ -233,7 +244,11 @@
   // NASA Milky Way photo map and the sky colour on a WebGL layer behind this canvas (js/skygl.js);
   // without WebGL the sky is filled here and the Milky Way outline polygons are used instead
   var glCanvas = document.getElementById('skygl');
-  var GL = glCanvas && window.SkyGL ? SkyGL(glCanvas, 'assets/milkyway_4k.jpg') : null;
+  // the star photo (NASA Deep Star Maps 2020): 8192x4096 in two halves on a laptop or desktop (mouse), 4096x2048 on phones
+  // and in VR, where one pixel of an eye's view already spans about 0.2°
+  // (the small previews on the presenter page take the 4k one too, so the laptop does not hold several 8k copies)
+  var STAR_MAPS = window.matchMedia && matchMedia('(pointer: fine)').matches && !/[?&]sim=/.test(location.search) ? ['assets/stars_8k_0.jpg', 'assets/stars_8k_1.jpg'] : ['assets/stars_4k.jpg'];
+  var GL = glCanvas && window.SkyGL ? SkyGL(glCanvas, 'assets/milkyway_4k.jpg', STAR_MAPS) : null;
   if (glCanvas && !GL) glCanvas.style.display = 'none';
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 3); // full phone resolution keeps stars crisp
@@ -285,7 +300,7 @@
     var moonJ = C.radec2vec.apply(null, C.bodyRaDec(S, 'Moon', st.minutes)), moonUp = C.apply(M, moonJ)[2];
     var moonK = (1 - (moonJ[0] * sunJ[0] + moonJ[1] * sunJ[1] + moonJ[2] * sunJ[2])) / 2; // lit fraction
     var moonLight = moonUp > 0 ? moonK * moonK * Math.min(1, moonUp / 0.42) : 0;
-    lim -= 1.6 * moonLight;
+    lim -= 0.8 * moonLight; // gentler than a real full Moon, so the stars stay the show
     var dark = Math.max(0, Math.min(1, (-sunAlt - 10) / 8)); // 0 at -10, 1 at -18
     var bodies = [];
     ['Saturn', 'Uranus', 'Neptune', 'Jupiter', 'Mars', 'Venus', 'Mercury', 'Moon'].forEach(function (b) {
@@ -377,12 +392,12 @@
     var stTr = STORY.ev && STORY.ev.trails;
     if (stTr && stTr.p > 0) drawTrails(view, stTr.hours * 60 * stTr.p);
     else { var myTr = myTrail(); if (myTr) drawTrails(view, myTr.h * 60 * Math.min(1, (Date.now() - myTr.t0) / 6000)); }   // presenter's 일주운동, or my own (free viewing / alone)
-    // stars
+    // stars: with the star photo underneath, only the brighter ones get a soft glow on top; without it, all of them
     var lim = frame.lim, sizeK = Math.max(0.85, Math.min(2, Math.sqrt(view.f / 380))) * (view.vr ? 1.25 : 1);
-    var M = frame.M, T = frame.T;
+    var M = frame.M, T = frame.T, photo = !!(GL && GL.starsReady && GL.starsReady());
     for (var i = 0; i < NS; i++) {
       var m = SM[i];
-      if (m > lim + 0.3) continue;
+      if (m > lim + 0.3 || (photo && m > 3.2)) continue;
       var x = SV[3 * i], y = SV[3 * i + 1], z = SV[3 * i + 2];
       var up = M[2][0] * x + M[2][1] * y + M[2][2] * z;
       if (up <= 0) continue;
@@ -395,6 +410,13 @@
       var mEff = m + 0.25 * (1 / Math.max(up, 0.06) - 1); // thicker air near the ground
       var vis = lim - mEff;
       if (vis < -0.3) continue;
+      if (photo) { // brightness ~ flux: each magnitude brighter is 2.5x the light, shown as a wider, stronger glow
+        var fl = Math.pow(10, -0.4 * (mEff - 3.2));
+        var vk = view.vr ? 1.35 : 1, dp = Math.min(72, 8.4 + 6.6 * Math.sqrt(fl)) * sizeK / (view.vr ? 1.25 : 1) * vk;
+        c.globalAlpha = Math.max(0, Math.min(0.95, 0.22 * vk * Math.sqrt(fl) * Math.min(1, vis / 1.5)));
+        c.drawImage(psf[SB[i]], P[0] - dp / 2, P[1] - dp / 2, dp, dp);
+        continue;
+      }
       var alpha = Math.max(0.4, Math.min(1, 0.55 + vis / 1.4));
       var d = Math.max(3, (lim + 2.6 - mEff) * 2.5) * sizeK;
       if (m < 1.5) d *= 1.25;
@@ -1937,11 +1959,13 @@
     var t = Math.max(0, Math.min(1, (-frame.sunAlt - 4) / 14));
     var lim = frame.lim, gain = opt('mw') ? frame.dark * frame.dark * Math.max(0.1, Math.min(1, (lim - 3.0) / 3.1)) * 0.95 : 0;
     var ml = frame.moonLight;
-    gain *= 1 - 0.75 * ml;
-    GL.draw(views, frame.T, frame.M, [(mix(34, 6, t) + 14 * ml) / 255, (mix(52, 7, t) + 20 * ml) / 255, (mix(98, 12, t) + 34 * ml) / 255], gain * 0.7, {
+    gain *= 1 - 0.4 * ml;
+    GL.draw(views, frame.T, frame.M, [(mix(34, 6, t) + 6 * ml) / 255, (mix(52, 7, t) + 9 * ml) / 255, (mix(98, 12, t) + 16 * ml) / 255], gain * 0.7, {
       glow: [(34 - 14 * t) / 255, (36 - 16 * t) / 255, (50 - 26 * t) / 255],
       dome: [(52 * (0.4 + 0.6 * t)) / 255, (38 * (0.4 + 0.6 * t)) / 255, (26 * (0.4 + 0.6 * t)) / 255],
-      cut: 0.2, curve: 1.25 // keep only the band itself, not the haze around it
+      cut: 0.2, curve: 1.25, // keep only the band itself, not the haze around it
+      // star photo: fades in after sunset, and a brighter sky (low limiting magnitude) cuts the faint stars first
+      sgain: Math.max(0, Math.min(1, (lim - 0.8) / 2.2)) * 2.3, scut: Math.max(0, Math.min(0.7, (6.4 - lim) * 0.08))
     });
   }
   // the story plays on the event night, or on the presenter's chosen night when they ask for it;
