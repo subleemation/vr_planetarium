@@ -20,10 +20,11 @@ async function until(fn, ms = 5000) { const t = Date.now(); for (;;) { const v =
 const WAKE = `window.__wake = 0; Object.defineProperty(navigator, 'wakeLock', { value: { request: function () { window.__wake++; var l = { released: false, release: function () { l.released = true; return Promise.resolve(); } }; window.__lock = l; return Promise.resolve(l); } } });`;
 
 const mock = await startMock(PORT, KEY);
-const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox', ...(process.env.E2E_NO_WEBGL ? ['--disable-webgl'] : []), '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
 const errors = [];
 try {
-  const ctx = await browser.newContext();
+  // phones get the 4k star photo (no fine pointer), as on real phones; software WebGL is too slow for the laptop's 8k one
+  const ctx = await browser.newContext({ hasTouch: true });
   const admin = await ctx.newPage(); await admin.setViewportSize({ width: 1440, height: 900 });
   admin.on('pageerror', (e) => errors.push('admin: ' + e.message));
   await admin.goto(`${BASE}/admin.html?r=${ROOM}${SV}`);
@@ -35,7 +36,7 @@ try {
     const p = await ctx.newPage(); await p.setViewportSize({ width: 844, height: 390 });
     await p.addInitScript(WAKE + `localStorage.setItem('osong-pid', '${pidName}');`);
     p.on('pageerror', (e) => errors.push(pidName + ': ' + e.message));
-    await p.goto(`${BASE}/?r=${ROOM}${SV}`);
+    await p.goto(`${BASE}/?r=${ROOM}${SV}`, { waitUntil: 'domcontentloaded' }); await p.waitForFunction(() => !!window.__sky, null, { timeout: 30000 });
     return p;
   };
   const a = await phone('screen', 'phonealpha1');
